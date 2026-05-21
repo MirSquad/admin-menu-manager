@@ -1,4 +1,4 @@
-# Admin Menu Manager
+# Admin Menu Manager WordPress Plugin
 
 A WordPress plugin for managing the wp-admin sidebar menu. Drag-and-drop reordering, hide items you don't use, group related items under custom headings, and nest top-level items as sub-items of other items.
 
