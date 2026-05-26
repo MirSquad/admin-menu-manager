@@ -3,7 +3,7 @@ title: "Admin Menu Manager — Changelog"
 doc_type: changelog
 project: admin-menu-manager
 created: 2026-03-29
-updated: 2026-03-29
+updated: 2026-05-25
 status: active
 summary: "Full session-by-session history of changes to the Admin Menu Manager plugin."
 tags: [wordpress, plugin, admin, sidebar, menu]
@@ -160,3 +160,52 @@ blog_candidate: false
 - Submenu ordering (nested items currently always append after parent's original sub-items)
 - Active state highlighting for custom groups
 - Per-role configuration
+
+---
+
+## Session 4 — 2026-05-25
+
+### WP.org readiness and code quality audit
+
+Full pass for WP.org submission readiness, i18n completeness, and security hardening. No new features — all changes are code quality and compliance.
+
+**Plugin header — missing fields added:**
+- `Plugin URI`, `Author URI`, `License URI`, `Text Domain`, `Domain Path`
+- `Requires at least: 5.0`, `Requires PHP: 7.4`
+- Version constant `WPA_MM_VERSION` defined; text domain loaded via `add_action('init', ...)` + `load_plugin_textdomain()`
+
+**i18n — all user-facing strings wrapped:**
+- `render_page()`: every visible string now uses `esc_html_e()`, `esc_attr_e()`, `wp_kses()`, or `_n()` with the `admin-menu-manager` text domain
+- `action_links` filter: `esc_html__( 'Settings', 'admin-menu-manager' )`
+- `wp_die()` calls: updated to `esc_html__()` + `['response' => 400]` HTTP status code
+
+**Inline JavaScript i18n — `wpaMM` object added:**
+- PHP-generated `var wpaMM = { ... }` object output before the main `<script>` block
+- All hardcoded English strings in `buildGroupRow()` and `confirm()` dialogs replaced with `wpaMM.*` references
+- All values escaped with `esc_js()` at the PHP output point
+
+**`show_notice()` — phpcs:ignore added:**
+- `$_GET['updated']` read-only flag now has `// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only flag set by wp_redirect() after save.`
+
+**`plugin_row_meta` filter added:**
+- Slug `admin-menu-manager` is taken on WP.org — filter removes the "View details" link (which would open a different plugin's directory listing) and adds a "Visit plugin site" link to miriamschwab.me instead
+- **Slug must be renamed before WP.org submission** — touches folder name, text domain, and option keys
+
+**New files created:**
+- `uninstall.php` — deletes `wpa_mm_config` option on plugin deletion; guarded with `WP_UNINSTALL_PLUGIN` check
+- `readme.txt` — full WP.org-format file with description, install steps, FAQ, changelog, and upgrade notices
+- `languages/` directory — placeholder for future .pot file and translations
+
+**`.gitignore` updated:**
+- Replaced single-name pillar doc patterns with wildcards (`*-handoff.md`, `*-changelog.md`, etc.) so prefixed filenames are caught
+
+### Decisions made
+
+- **Slug rename deferred:** Renaming is a significant change touching folder, text domain, and all option keys. Deferred until WP.org submission is imminent. `plugin_row_meta` filter handles the interim correctly.
+- **Version not bumped this session:** All changes are code quality / compliance — no user-visible behaviour change. Bump to 2.9.0 before next packaging.
+
+### What's next
+
+- Bump version to 2.9.0 before next zip is packaged
+- Rename slug before WP.org submission (`admin-menu-manager` is taken on WP.org)
+- Submenu ordering, active state highlighting, per-role configuration (unchanged from prior sessions)

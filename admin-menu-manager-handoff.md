@@ -3,7 +3,7 @@ title: "Admin Menu Manager — Handoff Doc"
 doc_type: handoff
 project: admin-menu-manager
 created: 2026-03-29
-updated: 2026-03-29
+updated: 2026-05-25
 status: active
 summary: "Current state snapshot for the Admin Menu Manager plugin. Read this before any session."
 tags: [wordpress, plugin, admin, sidebar, menu]
@@ -18,10 +18,17 @@ Read this first, every session.
 
 ## Current state
 
-**Version:** 2.8.0
+**Version:** 2.8.0 (bump to 2.9.0 before next packaging)
 **File:** `admin-menu-manager/admin-menu-manager.php` (single-file plugin)
 **Deliverable:** Installable `.zip` — user uploads via Plugins > Add New > Upload Plugin
 **Settings page:** Settings > Admin Menu Manager
+
+**New files added in Session 4:**
+- `uninstall.php` — deletes `wpa_mm_config` on plugin deletion
+- `readme.txt` — WP.org-format readme
+- `languages/` directory — placeholder for translations
+
+**WP.org status:** Plugin header, i18n, escaping, and readme are now WP.org-ready. **Exception: the slug `admin-menu-manager` is taken on WP.org.** Must be renamed (folder, text domain, option keys) before submitting. A `plugin_row_meta` filter removes the broken "View details" link in the interim.
 
 **What's working:**
 - Drag-and-drop reordering via jQuery UI Sortable (bundled in WP admin — no extra dependencies)
@@ -33,6 +40,7 @@ Read this first, every session.
 - Settings link in the Plugins list page (via `plugin_action_links_` filter)
 - Reset to defaults button — clears all config and returns sidebar to WP defaults
 - Consistent naming: "Admin Menu Manager" everywhere
+- All inline JS strings translatable via `wpaMM` PHP-generated object
 
 **What's not yet built:**
 - Control over relative order of nested items within a parent's existing submenu (added items always append after original sub-items)

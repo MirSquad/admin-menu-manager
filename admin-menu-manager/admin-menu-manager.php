@@ -1,13 +1,29 @@
 <?php
 /**
- * Plugin Name: Admin Menu Manager
- * Description: Drag-and-drop reordering, hiding, grouping, and nesting of admin sidebar items. Applies to admin users only.
- * Version:     2.8.0
- * Author:      Custom
- * License:     GPL-2.0-or-later
+ * Plugin Name:       Admin Menu Manager
+ * Plugin URI:        https://miriamschwab.me/plugins/admin-menu-manager
+ * Description:       Drag-and-drop reordering, hiding, grouping, and nesting of admin sidebar items. Applies to admin users only.
+ * Version:           2.8.0
+ * Author:            Miriam Schwab
+ * Author URI:        https://miriamschwab.me
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       admin-menu-manager
+ * Domain Path:       /languages
+ * Requires at least: 5.0
+ * Requires PHP:      7.4
+ * Network:           false
  */
 
-if ( ! defined( 'ABSPATH' ) ) exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+define( 'WPA_MM_VERSION', '2.8.0' );
+
+add_action( 'init', function() {
+	load_plugin_textdomain( 'admin-menu-manager', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+} );
 
 class WPA_Menu_Manager {
 
@@ -31,7 +47,7 @@ class WPA_Menu_Manager {
 		$settings = sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( admin_url( 'options-general.php?page=' . self::SLUG ) ),
-			__( 'Settings' )
+			esc_html__( 'Settings', 'admin-menu-manager' )
 		);
 		array_unshift( $links, $settings );
 		return $links;
@@ -59,7 +75,8 @@ class WPA_Menu_Manager {
 	public function register_page(): void {
 		if ( ! current_user_can( 'manage_options' ) ) return;
 		add_options_page(
-			'Admin Menu Manager', 'Admin Menu Manager',
+			__( 'Admin Menu Manager', 'admin-menu-manager' ),
+			__( 'Admin Menu Manager', 'admin-menu-manager' ),
 			'manage_options', self::SLUG,
 			[ $this, 'render_page' ]
 		);
@@ -248,7 +265,9 @@ class WPA_Menu_Manager {
 	// ── Save handler ──────────────────────────────────────────────────────────
 
 	public function handle_save(): void {
-		if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Not allowed.' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'admin-menu-manager' ) );
+		}
 		check_admin_referer( 'wpa_mm_nonce' );
 
 		// Reset: wipe all saved config and return to WP defaults
@@ -264,7 +283,7 @@ class WPA_Menu_Manager {
 		$raw = isset( $_POST['mm_payload'] ) ? wp_unslash( $_POST['mm_payload'] ) : '{}';
 		// Reject payloads over 200 KB — no legitimate menu config comes close to this.
 		if ( strlen( $raw ) > 204800 ) {
-			wp_die( 'Payload too large.', 400 );
+			wp_die( esc_html__( 'Payload too large.', 'admin-menu-manager' ), '', [ 'response' => 400 ] );
 		}
 		$data = json_decode( $raw, true );
 
@@ -323,11 +342,11 @@ class WPA_Menu_Manager {
 	public function show_notice(): void {
 		$screen = get_current_screen();
 		if ( ! $screen || strpos( $screen->id, 'menu-manager' ) === false ) return;
-		if ( ! empty( $_GET['updated'] ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p>Menu settings saved.</p></div>';
+		if ( ! empty( $_GET['updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only flag set by wp_redirect() after save.
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Menu settings saved.', 'admin-menu-manager' ) . '</p></div>';
 		}
-		if ( ! empty( $_GET['reset'] ) ) {
-			echo '<div class="notice notice-warning is-dismissible"><p>Menu reset to WordPress defaults. All custom settings have been cleared.</p></div>';
+		if ( ! empty( $_GET['reset'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only flag set by wp_redirect() after reset.
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Menu reset to WordPress defaults. All custom settings have been cleared.', 'admin-menu-manager' ) . '</p></div>';
 		}
 	}
 
@@ -413,23 +432,21 @@ class WPA_Menu_Manager {
 
 		?>
 <div class="wrap">
-<h1>Admin Menu Manager</h1>
+<h1><?php esc_html_e( 'Admin Menu Manager', 'admin-menu-manager' ); ?></h1>
 <p style="max-width:680px;color:#555;">
-	Drag rows to reorder. Use <strong>Parent</strong> to nest an item inside a group or another menu item —
-	it disappears from the top level and its sub-items are preserved inside the parent.
-	<strong>Hide</strong> removes the item entirely. Settings apply to admin users only.
+	<?php echo wp_kses( __( 'Drag rows to reorder. Use <strong>Parent</strong> to nest an item inside a group or another menu item — it disappears from the top level and its sub-items are preserved inside the parent. <strong>Hide</strong> removes the item entirely. Settings apply to admin users only.', 'admin-menu-manager' ), [ 'strong' => [] ] ); ?>
 </p>
 
 <div style="background:#fff8e5;border-left:4px solid #f0b429;padding:10px 14px;margin:0 0 24px;font-size:13px;max-width:680px;">
-	<strong>⚠ Don't hide Settings</strong> — that's where this page lives. Direct URL if you ever need it:<br>
+	<?php echo wp_kses( __( "<strong>⚠ Don't hide Settings</strong> — that's where this page lives. Direct URL if you ever need it:", 'admin-menu-manager' ), [ 'strong' => [] ] ); ?><br>
 	<code style="word-break:break-all;font-size:11px;"><?php echo esc_html( admin_url( 'options-general.php?page=' . self::SLUG ) ); ?></code>
 </div>
 
 <!-- Add group -->
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;">
-	<input type="text" id="new-group-title" placeholder="New group name" style="width:200px;">
-	<button type="button" id="btn-add-group" class="button button-secondary">+ Add Group</button>
-	<span style="color:#999;font-size:12px;">Groups appear inline — drag them into position like any other row.</span>
+	<input type="text" id="new-group-title" placeholder="<?php esc_attr_e( 'New group name', 'admin-menu-manager' ); ?>" style="width:200px;">
+	<button type="button" id="btn-add-group" class="button button-secondary"><?php esc_html_e( '+ Add Group', 'admin-menu-manager' ); ?></button>
+	<span style="color:#999;font-size:12px;"><?php esc_html_e( 'Groups appear inline — drag them into position like any other row.', 'admin-menu-manager' ); ?></span>
 </div>
 
 <form id="mm-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -441,9 +458,9 @@ class WPA_Menu_Manager {
 	<!-- Column headers -->
 	<div style="display:flex;align-items:center;padding:6px 10px;background:#f6f7f7;border:1px solid #ddd;border-bottom:none;border-radius:4px 4px 0 0;font-size:12px;color:#666;font-weight:600;">
 		<span style="width:28px;flex-shrink:0;"></span>
-		<span style="flex:1;">Item</span>
-		<span style="width:50px;text-align:center;flex-shrink:0;">Hide</span>
-		<span style="width:190px;flex-shrink:0;margin-left:8px;">Parent</span>
+		<span style="flex:1;"><?php esc_html_e( 'Item', 'admin-menu-manager' ); ?></span>
+		<span style="width:50px;text-align:center;flex-shrink:0;"><?php esc_html_e( 'Hide', 'admin-menu-manager' ); ?></span>
+		<span style="width:190px;flex-shrink:0;margin-left:8px;"><?php esc_html_e( 'Parent', 'admin-menu-manager' ); ?></span>
 	</div>
 
 	<!-- Sortable list -->
@@ -460,17 +477,17 @@ class WPA_Menu_Manager {
 		data-type="group"
 		data-id="<?php echo $gid; ?>"
 		style="display:flex;align-items:center;padding:8px 10px;<?php echo esc_attr( $row_border ); ?>background:#eef2ff;cursor:move;">
-		<span class="mm-handle dashicons dashicons-menu" title="Drag to reorder"
+		<span class="mm-handle dashicons dashicons-menu" title="<?php esc_attr_e( 'Drag to reorder', 'admin-menu-manager' ); ?>"
 			style="color:#7c8fcc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>
 		<span style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
 			<strong class="mm-group-display">📁 <span class="mm-group-title-text"><?php echo esc_html( $entry['title'] ); ?></span></strong>
-			<span style="font-size:11px;background:#7c8fcc;color:#fff;padding:1px 6px;border-radius:3px;">GROUP</span>
+			<span style="font-size:11px;background:#7c8fcc;color:#fff;padding:1px 6px;border-radius:3px;"><?php esc_html_e( 'GROUP', 'admin-menu-manager' ); ?></span>
 			<input type="text" class="mm-group-title-input"
 				value="<?php echo esc_attr( $entry['title'] ); ?>"
-				style="display:none;width:150px;" placeholder="Group name">
-			<button type="button" class="button button-small btn-edit-group">Rename</button>
-			<button type="button" class="button button-small btn-confirm-rename" style="display:none;">OK</button>
-			<button type="button" class="button button-small button-link-delete btn-delete-group">✕ Delete</button>
+				style="display:none;width:150px;" placeholder="<?php esc_attr_e( 'Group name', 'admin-menu-manager' ); ?>">
+			<button type="button" class="button button-small btn-edit-group"><?php esc_html_e( 'Rename', 'admin-menu-manager' ); ?></button>
+			<button type="button" class="button button-small btn-confirm-rename" style="display:none;"><?php esc_html_e( 'OK', 'admin-menu-manager' ); ?></button>
+			<button type="button" class="button button-small button-link-delete btn-delete-group">✕ <?php esc_html_e( 'Delete', 'admin-menu-manager' ); ?></button>
 		</span>
 		<span style="width:50px;flex-shrink:0;"></span>
 		<span style="width:190px;flex-shrink:0;margin-left:8px;"></span>
@@ -483,22 +500,22 @@ class WPA_Menu_Manager {
 		data-type="item"
 		data-slug="<?php echo esc_attr( $entry['slug'] ); ?>"
 		style="display:flex;align-items:center;padding:7px 10px;<?php echo esc_attr( $row_border ); ?>background:<?php echo $hidden ? '#fafafa' : '#fff'; ?>;cursor:move;<?php echo $hidden ? 'opacity:.4;' : ''; ?>">
-		<span class="mm-handle dashicons dashicons-menu" title="Drag to reorder"
+		<span class="mm-handle dashicons dashicons-menu" title="<?php esc_attr_e( 'Drag to reorder', 'admin-menu-manager' ); ?>"
 			style="color:#ccc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>
 		<span style="flex:1;">
 			<?php echo esc_html( $entry['title'] ); ?>
 			<?php if ( $entry['n_sub'] > 0 ) : ?>
-			<span style="color:#aaa;font-size:11px;"> (<?php echo (int) $entry['n_sub']; ?> sub-items)</span>
+			<span style="color:#aaa;font-size:11px;"> (<?php echo esc_html( sprintf( _n( '%d sub-item', '%d sub-items', $entry['n_sub'], 'admin-menu-manager' ), $entry['n_sub'] ) ); ?>)</span>
 			<?php endif; ?>
 		</span>
-		<label style="width:50px;flex-shrink:0;text-align:center;cursor:pointer;font-size:13px;" title="Hide this item">
+		<label style="width:50px;flex-shrink:0;text-align:center;cursor:pointer;font-size:13px;" title="<?php esc_attr_e( 'Hide this item', 'admin-menu-manager' ); ?>">
 			<input type="checkbox" class="mm-hide-cb" <?php checked( $hidden ); ?>>
 		</label>
 		<span style="width:190px;flex-shrink:0;margin-left:8px;">
 			<select class="mm-parent-select" style="width:100%;font-size:12px;">
-				<option value="">— Top level —</option>
+				<option value=""><?php esc_html_e( '— Top level —', 'admin-menu-manager' ); ?></option>
 				<?php if ( ! empty( $group_opts ) ) : ?>
-				<optgroup label="Groups">
+				<optgroup label="<?php esc_attr_e( 'Groups', 'admin-menu-manager' ); ?>">
 					<?php foreach ( $group_opts as $val => $label ) : ?>
 					<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $parent, $val ); ?>>
 						📁 <?php echo esc_html( $label ); ?>
@@ -506,7 +523,7 @@ class WPA_Menu_Manager {
 					<?php endforeach; ?>
 				</optgroup>
 				<?php endif; ?>
-				<optgroup label="Nest under item">
+				<optgroup label="<?php esc_attr_e( 'Nest under item', 'admin-menu-manager' ); ?>">
 					<?php foreach ( $item_parent_opts as $val => $label ) :
 						if ( $val === 'item:' . $entry['slug'] ) continue;
 					?>
@@ -524,20 +541,20 @@ class WPA_Menu_Manager {
 </div>
 
 <p style="margin-top:16px;">
-	<button type="submit" id="btn-save" class="button button-primary button-large">Save Menu Settings</button>
+	<button type="submit" id="btn-save" class="button button-primary button-large"><?php esc_html_e( 'Save Menu Settings', 'admin-menu-manager' ); ?></button>
 </p>
 </form>
 
 <div style="max-width:700px;margin-top:32px;padding-top:24px;border-top:1px solid #ddd;">
-	<h3 style="margin-top:0;">Reset to defaults</h3>
-	<p style="color:#555;font-size:13px;">Clears all saved settings and returns the sidebar to exactly how WordPress shows it by default. Use this if something has gone wrong and you want to start fresh.</p>
+	<h3 style="margin-top:0;"><?php esc_html_e( 'Reset to defaults', 'admin-menu-manager' ); ?></h3>
+	<p style="color:#555;font-size:13px;"><?php esc_html_e( 'Clears all saved settings and returns the sidebar to exactly how WordPress shows it by default. Use this if something has gone wrong and you want to start fresh.', 'admin-menu-manager' ); ?></p>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
-		onsubmit="return confirm('This will clear all your menu settings and reset the sidebar to WordPress defaults. Are you sure?')">
+		onsubmit="return confirm('<?php echo esc_js( __( 'This will clear all your menu settings and reset the sidebar to WordPress defaults. Are you sure?', 'admin-menu-manager' ) ); ?>')">
 		<?php wp_nonce_field( 'wpa_mm_nonce' ); ?>
 		<input type="hidden" name="action"    value="<?php echo esc_attr( self::ACTION ); ?>">
 		<input type="hidden" name="wpa_reset" value="1">
 		<button type="submit" class="button button-large" style="color:#b32d2e;border-color:#b32d2e;">
-			Reset to WordPress Defaults
+			<?php esc_html_e( 'Reset to WordPress Defaults', 'admin-menu-manager' ); ?>
 		</button>
 	</form>
 </div>
@@ -555,6 +572,15 @@ class WPA_Menu_Manager {
 </style>
 
 <script>
+var wpaMM = {
+	rename:        '<?php echo esc_js( __( 'Rename', 'admin-menu-manager' ) ); ?>',
+	ok:            '<?php echo esc_js( __( 'OK', 'admin-menu-manager' ) ); ?>',
+	del:           '<?php echo esc_js( __( '✕ Delete', 'admin-menu-manager' ) ); ?>',
+	group:         '<?php echo esc_js( __( 'GROUP', 'admin-menu-manager' ) ); ?>',
+	groupName:     '<?php echo esc_js( __( 'Group name', 'admin-menu-manager' ) ); ?>',
+	confirmDelete: '<?php echo esc_js( __( 'Delete this group? Items assigned to it will return to the top level.', 'admin-menu-manager' ) ); ?>',
+	enterName:     '<?php echo esc_js( __( 'Please enter a group name.', 'admin-menu-manager' ) ); ?>'
+};
 jQuery(function($) {
 
 	// ── Sortable ──────────────────────────────────────────────────────────────
@@ -609,7 +635,7 @@ jQuery(function($) {
 
 	// ── Delete group ──────────────────────────────────────────────────────────
 	$(document).on('click', '.btn-delete-group', function() {
-		if (!confirm('Delete this group? Items assigned to it will return to the top level.')) return;
+		if (!confirm(wpaMM.confirmDelete)) return;
 		var $row = $(this).closest('li');
 		var gid  = String($row.data('id'));
 		$('#mm-list .mm-parent-select').each(function() {
@@ -623,7 +649,7 @@ jQuery(function($) {
 	// ── Add group ─────────────────────────────────────────────────────────────
 	$('#btn-add-group').on('click', function() {
 		var title = $('#new-group-title').val().trim();
-		if (!title) { alert('Please enter a group name.'); return; }
+		if (!title) { alert(wpaMM.enterName); return; }
 		var gid = 'g' + Date.now();
 		$('#mm-list').append(buildGroupRow(gid, title));
 		addGroupToSelects(gid, title);
@@ -638,14 +664,14 @@ jQuery(function($) {
 			.css({display:'flex', 'align-items':'center', padding:'8px 10px',
 				  'border-top':'1px solid #eee', background:'#eef2ff', cursor:'move'})
 			.html(
-				'<span class="mm-handle dashicons dashicons-menu" title="Drag to reorder" style="color:#7c8fcc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>' +
+				'<span class="mm-handle dashicons dashicons-menu" style="color:#7c8fcc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>' +
 				'<span style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">' +
 					'<strong class="mm-group-display">📁 <span class="mm-group-title-text">' + safe + '</span></strong>' +
-					'<span style="font-size:11px;background:#7c8fcc;color:#fff;padding:1px 6px;border-radius:3px;">GROUP</span>' +
-					'<input type="text" class="mm-group-title-input" value="' + safe + '" style="display:none;width:150px;" placeholder="Group name">' +
-					'<button type="button" class="button button-small btn-edit-group">Rename</button>' +
-					'<button type="button" class="button button-small btn-confirm-rename" style="display:none;">OK</button>' +
-					'<button type="button" class="button button-small button-link-delete btn-delete-group">✕ Delete</button>' +
+					'<span style="font-size:11px;background:#7c8fcc;color:#fff;padding:1px 6px;border-radius:3px;">' + wpaMM.group + '</span>' +
+					'<input type="text" class="mm-group-title-input" value="' + safe + '" style="display:none;width:150px;" placeholder="' + wpaMM.groupName + '">' +
+					'<button type="button" class="button button-small btn-edit-group">' + wpaMM.rename + '</button>' +
+					'<button type="button" class="button button-small btn-confirm-rename" style="display:none;">' + wpaMM.ok + '</button>' +
+					'<button type="button" class="button button-small button-link-delete btn-delete-group">' + wpaMM.del + '</button>' +
 				'</span>' +
 				'<span style="width:50px;flex-shrink:0;"></span>' +
 				'<span style="width:190px;flex-shrink:0;margin-left:8px;"></span>'
@@ -736,3 +762,19 @@ jQuery(function($) {
 if ( is_admin() ) {
 	new WPA_Menu_Manager();
 }
+
+// The slug "admin-menu-manager" is taken on WordPress.org. Replace the default
+// "View details" row link (which would show another plugin's details) with a
+// direct link to the author's site.
+add_filter( 'plugin_row_meta', function( $links, $file ) {
+	if ( plugin_basename( __FILE__ ) !== $file ) {
+		return $links;
+	}
+	foreach ( $links as $key => $link ) {
+		if ( strpos( $link, 'plugin-install.php' ) !== false ) {
+			unset( $links[ $key ] );
+		}
+	}
+	$links[] = '<a href="' . esc_url( 'https://miriamschwab.me/plugins/admin-menu-manager' ) . '" target="_blank">' . esc_html__( 'Visit plugin site', 'admin-menu-manager' ) . '</a>';
+	return $links;
+}, 10, 2 );
