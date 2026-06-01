@@ -3,7 +3,7 @@
  * Plugin Name:       Admin Menu Manager
  * Plugin URI:        https://miriamschwab.me/plugins/admin-menu-manager
  * Description:       Drag-and-drop reordering, hiding, grouping, and nesting of admin sidebar items. Applies to admin users only.
- * Version:           2.8.0
+ * Version:           2.9.2
  * Author:            Miriam Schwab
  * Author URI:        https://miriamschwab.me
  * License:           GPL-2.0-or-later
@@ -19,7 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPA_MM_VERSION', '2.8.0' );
+define( 'WPA_MM_VERSION', '2.9.2' );
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/abilities.php';
 
 add_action( 'init', function() {
 	load_plugin_textdomain( 'admin-menu-manager', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
@@ -546,6 +548,19 @@ class WPA_Menu_Manager {
 </form>
 
 <div style="max-width:700px;margin-top:32px;padding-top:24px;border-top:1px solid #ddd;">
+	<h3 style="margin-top:0;"><?php esc_html_e( 'Abilities API', 'admin-menu-manager' ); ?></h3>
+	<p style="color:#555;font-size:13px;"><?php esc_html_e( 'Allow AI agents (via the WordPress Abilities API) to reset the menu configuration. Read access is always enabled. Requires WordPress 6.9+.', 'admin-menu-manager' ); ?></p>
+	<form method="post" action="options.php">
+		<?php settings_fields( 'wpa_mm_abilities' ); ?>
+		<label>
+			<input type="checkbox" name="wpa_mm_write_abilities" value="1" <?php checked( 1, get_option( 'wpa_mm_write_abilities', 0 ) ); ?> />
+			<?php esc_html_e( 'Enable write abilities (reset menu config)', 'admin-menu-manager' ); ?>
+		</label>
+		<p style="margin-top:10px;"><?php submit_button( __( 'Save', 'admin-menu-manager' ), 'secondary small', 'submit', false ); ?></p>
+	</form>
+</div>
+
+<div style="max-width:700px;margin-top:32px;padding-top:24px;border-top:1px solid #ddd;">
 	<h3 style="margin-top:0;"><?php esc_html_e( 'Reset to defaults', 'admin-menu-manager' ); ?></h3>
 	<p style="color:#555;font-size:13px;"><?php esc_html_e( 'Clears all saved settings and returns the sidebar to exactly how WordPress shows it by default. Use this if something has gone wrong and you want to start fresh.', 'admin-menu-manager' ); ?></p>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
@@ -762,6 +777,13 @@ jQuery(function($) {
 if ( is_admin() ) {
 	new WPA_Menu_Manager();
 }
+
+// Register the write-abilities toggle so it saves via options.php.
+add_action( 'admin_init', function() {
+	register_setting( 'wpa_mm_abilities', 'wpa_mm_write_abilities', array(
+		'sanitize_callback' => 'rest_sanitize_boolean',
+	) );
+} );
 
 // The slug "admin-menu-manager" is taken on WordPress.org. Replace the default
 // "View details" row link (which would show another plugin's details) with a

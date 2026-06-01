@@ -36,3 +36,25 @@ Single PHP file, no build process, no external dependencies beyond jQuery UI Sor
 ## License
 
 GPL-2.0-or-later
+
+## WordPress Abilities API
+
+This plugin exposes abilities for the [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/) (WordPress 6.9+), making it manageable by AI agents via the [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin.
+
+### Requirements
+
+- WordPress 6.9+
+- [MCP Adapter plugin](https://github.com/WordPress/mcp-adapter)
+
+### Available abilities
+
+| Ability | Access | Description |
+|---|---|---|
+| `admin-menu-manager/get-config` | Always on | Returns the full saved menu configuration: item order, hidden flags, custom groups, and parent assignments |
+| `admin-menu-manager/reset-config` | Write (opt-in) | Resets the admin sidebar to WordPress defaults by deleting all saved configuration |
+
+### Enabling write abilities
+
+Write abilities are disabled by default. To enable them, go to **Settings > Admin Menu Manager** and check **Enable write abilities** under the Abilities API section.
+
+> **Note:** `reset-config` is destructive and cannot be undone. Only enable write abilities if you trust the AI agent that has access to your site.
