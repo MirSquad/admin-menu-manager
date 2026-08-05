@@ -1,9 +1,9 @@
-<?php
+<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName -- Bootstrap class lives in the main plugin file, which WordPress requires to be named after the plugin.
 /**
  * Plugin Name:       Admin Menu Manager
  * Plugin URI:        https://miriamschwab.me/plugins/admin-menu-manager
  * Description:       Drag-and-drop reordering, hiding, grouping, and nesting of admin sidebar items. Applies to admin users only.
- * Version:           2.9.2
+ * Version:           2.9.3
  * Author:            Miriam Schwab
  * Author URI:        https://miriamschwab.me
  * License:           GPL-2.0-or-later
@@ -13,38 +13,66 @@
  * Requires at least: 5.0
  * Requires PHP:      7.4
  * Network:           false
+ *
+ * @package Admin_Menu_Manager
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPA_MM_VERSION', '2.9.2' );
+define( 'WPA_MM_VERSION', '2.9.3' );
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/abilities.php';
 
-add_action( 'init', function() {
-	load_plugin_textdomain( 'admin-menu-manager', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-} );
+add_action(
+	'init',
+	function () {
+		load_plugin_textdomain( 'admin-menu-manager', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	}
+);
 
+/**
+ * Reorders, hides, groups, and nests WordPress admin sidebar items for admins.
+ */
 class WPA_Menu_Manager {
 
-	private $orig_snap = [];
-	private $config    = null;
+	/**
+	 * Snapshot of the original admin menu, keyed by slug, taken before apply_config() rebuilds it.
+	 *
+	 * @var array<string, array{item: array, pos: int, n_sub: int}>
+	 */
+	private $orig_snap = array();
+
+	/**
+	 * Lazily-loaded plugin configuration (groups and items).
+	 *
+	 * @var array{groups: array, items: array}|null
+	 */
+	private $config = null;
 
 	const OPTION = 'wpa_mm_config';
 	const SLUG   = 'wpa-menu-manager';
 	const ACTION = 'wpa_mm_save';
 
+	/**
+	 * Wire up the admin hooks.
+	 */
 	public function __construct() {
-		add_action( 'admin_menu',                 [ $this, 'register_page' ]       );
-		add_action( 'admin_menu',                 [ $this, 'apply_config'  ], 999  );
-		add_action( 'admin_post_' . self::ACTION, [ $this, 'handle_save'   ]       );
-		add_action( 'admin_enqueue_scripts',      [ $this, 'enqueue'       ]       );
-		add_action( 'admin_notices',              [ $this, 'show_notice'   ]       );
-		add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), [ $this, 'action_links' ] );
+		add_action( 'admin_menu', array( $this, 'register_page' ) );
+		add_action( 'admin_menu', array( $this, 'apply_config' ), 999 );
+		add_action( 'admin_post_' . self::ACTION, array( $this, 'handle_save' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
+		add_action( 'admin_notices', array( $this, 'show_notice' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'action_links' ) );
 	}
 
+	/**
+	 * Add a "Settings" link to the plugin's row on the Plugins screen.
+	 *
+	 * @param string[] $links Existing action links.
+	 * @return string[] Action links with the settings link prepended.
+	 */
 	public function action_links( array $links ): array {
 		$settings = sprintf(
 			'<a href="%s">%s</a>',
@@ -57,16 +85,30 @@ class WPA_Menu_Manager {
 
 	// ── Config ────────────────────────────────────────────────────────────────
 
+	/**
+	 * Get the plugin configuration, merged over defaults and cached on the instance.
+	 *
+	 * @return array{groups: array, items: array} Plugin configuration.
+	 */
 	private function get_config(): array {
-		if ( $this->config === null ) {
+		if ( null === $this->config ) {
 			$this->config = array_merge(
-				[ 'groups' => [], 'items' => [] ],
-				(array) get_option( self::OPTION, [] )
+				array(
+					'groups' => array(),
+					'items'  => array(),
+				),
+				(array) get_option( self::OPTION, array() )
 			);
 		}
 		return $this->config;
 	}
 
+	/**
+	 * Persist the plugin configuration.
+	 *
+	 * @param array{groups: array, items: array} $c Configuration to store.
+	 * @return void
+	 */
 	private function save_config( array $c ): void {
 		// autoload=false — config is only needed in admin, not on every frontend request.
 		update_option( self::OPTION, $c, false );
@@ -74,63 +116,90 @@ class WPA_Menu_Manager {
 
 	// ── Hooks ─────────────────────────────────────────────────────────────────
 
+	/**
+	 * Register the plugin's settings page under Settings.
+	 *
+	 * @return void
+	 */
 	public function register_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) return;
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		add_options_page(
 			__( 'Admin Menu Manager', 'admin-menu-manager' ),
 			__( 'Admin Menu Manager', 'admin-menu-manager' ),
-			'manage_options', self::SLUG,
-			[ $this, 'render_page' ]
+			'manage_options',
+			self::SLUG,
+			array( $this, 'render_page' )
 		);
 	}
 
+	/**
+	 * Enqueue the jQuery UI sortable script on the plugin's settings screen only.
+	 *
+	 * @param string $hook Current admin page hook suffix.
+	 * @return void
+	 */
 	public function enqueue( $hook ): void {
-		if ( strpos( $hook, 'menu-manager' ) === false ) return;
+		if ( false === strpos( $hook, 'menu-manager' ) ) {
+			return;
+		}
 		wp_enqueue_script( 'jquery-ui-sortable' );
 	}
 
-	// ── Apply saved config to live menu ───────────────────────────────────────
-	//
-	// Runs at priority 999 so all plugins have registered.
-	// Snapshots $menu, wipes it, rebuilds from config.
-	// Parents can be: a custom group ("group:ID") or another item ("item:slug").
-
+	/**
+	 * Apply the saved configuration to the live admin menu.
+	 *
+	 * Runs at priority 999 so all plugins have registered. Snapshots $menu, wipes it,
+	 * and rebuilds it from config. Parents can be a custom group ("group:ID") or
+	 * another item ("item:slug").
+	 *
+	 * @return void
+	 */
 	public function apply_config(): void {
-		if ( ! current_user_can( 'manage_options' ) ) return;
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 
 		global $menu, $submenu;
 		$config = $this->get_config();
-		if ( empty( $config['items'] ) && empty( $config['groups'] ) ) return;
+		if ( empty( $config['items'] ) && empty( $config['groups'] ) ) {
+			return;
+		}
 
 		// Snapshot: slug => [item array, original position, sub-item count]
 		// Stored as class property so render_page() sees the original menu regardless of
 		// what apply_config() removes from $menu.
-		$snap = [];
+		$snap = array();
 		foreach ( $menu as $pos => $item ) {
-			if ( empty( $item[2] ) ) continue;
-			if ( strpos( $item[4] ?? '', 'separator' ) !== false ) continue;
-			$snap[ $item[2] ] = [
+			if ( empty( $item[2] ) ) {
+				continue;
+			}
+			if ( strpos( $item[4] ?? '', 'separator' ) !== false ) {
+				continue;
+			}
+			$snap[ $item[2] ] = array(
 				'item'  => $item,
 				'pos'   => (int) $pos,
 				'n_sub' => isset( $submenu[ $item[2] ] ) ? count( $submenu[ $item[2] ] ) : 0,
-			];
+			);
 		}
 		$this->orig_snap = $snap;
 
-		// Index groups by ID
-		$groups_by_id = [];
+		// Index groups by ID.
+		$groups_by_id = array();
 		foreach ( $config['groups'] as $g ) {
 			$groups_by_id[ $g['id'] ] = $g;
 		}
 
 		// ── Pre-index items by parent (avoids O(n²) child-finding loops below) ──
 
-		$by_parent      = []; // parent_key => [ item_config, ... ]
-		$configured_set = []; // slug => true  (O(1) lookup for unconfigured items)
+		$by_parent      = array(); // Maps a parent_key to its list of item configs.
+		$configured_set = array(); // Maps a slug to true for O(1) "is configured" lookups.
 
 		foreach ( $config['items'] as $ic ) {
 			$configured_set[ $ic['slug'] ] = true;
-			$p = $ic['parent'] ?? '';
+			$p                             = $ic['parent'] ?? '';
 			if ( $p ) {
 				$by_parent[ $p ][] = $ic;
 			}
@@ -138,19 +207,27 @@ class WPA_Menu_Manager {
 
 		// ── Build ordered top-level list ──
 
-		$top = [];
+		$top = array();
 
-		// Items with no parent
+		// Items with no parent.
 		foreach ( $config['items'] as $ic ) {
-			if ( ! empty( $ic['parent'] ) || ! empty( $ic['hidden'] ) ) continue;
-			if ( ! isset( $snap[ $ic['slug'] ] ) ) continue;
-			$top[] = [ 'type' => 'item', 'order' => (int) $ic['order'], 'slug' => $ic['slug'] ];
+			if ( ! empty( $ic['parent'] ) || ! empty( $ic['hidden'] ) ) {
+				continue;
+			}
+			if ( ! isset( $snap[ $ic['slug'] ] ) ) {
+				continue;
+			}
+			$top[] = array(
+				'type'  => 'item',
+				'order' => (int) $ic['order'],
+				'slug'  => $ic['slug'],
+			);
 		}
 
-		// Groups — only include if they have at least one visible child
+		// Groups — only include if they have at least one visible child.
 		foreach ( $config['groups'] as $g ) {
 			$key      = 'group:' . $g['id'];
-			$children = isset( $by_parent[ $key ] ) ? $by_parent[ $key ] : [];
+			$children = isset( $by_parent[ $key ] ) ? $by_parent[ $key ] : array();
 			$has      = false;
 			foreach ( $children as $ic ) {
 				if ( empty( $ic['hidden'] ) && isset( $snap[ $ic['slug'] ] ) ) {
@@ -158,87 +235,117 @@ class WPA_Menu_Manager {
 					break;
 				}
 			}
-			if ( ! $has ) continue;
-			$top[] = [ 'type' => 'group', 'order' => (int) ( $g['order'] ?? 500 ), 'id' => $g['id'] ];
+			if ( ! $has ) {
+				continue;
+			}
+			$top[] = array(
+				'type'  => 'group',
+				'order' => (int) ( $g['order'] ?? 500 ),
+				'id'    => $g['id'],
+			);
 		}
 
-		// Items not yet in config: append at original position
+		// Items not yet in config: append at original position.
 		foreach ( $snap as $slug => $info ) {
-			if ( isset( $configured_set[ $slug ] ) ) continue;
-			$top[] = [ 'type' => 'item', 'order' => 900 + $info['pos'], 'slug' => $slug ];
+			if ( isset( $configured_set[ $slug ] ) ) {
+				continue;
+			}
+			$top[] = array(
+				'type'  => 'item',
+				'order' => 900 + $info['pos'],
+				'slug'  => $slug,
+			);
 		}
 
-		usort( $top, function( $a, $b ) { return $a['order'] - $b['order']; } );
+		usort(
+			$top,
+			function ( $a, $b ) {
+				return $a['order'] - $b['order'];
+			}
+		);
 
 		// ── Rebuild $menu ──
 
-		$menu = [];
+		$menu = array(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride -- Rebuilding the admin menu is this plugin's core purpose.
 		$pos  = 2;
 
 		foreach ( $top as $te ) {
 
-			if ( $te['type'] === 'item' ) {
+			if ( 'item' === $te['type'] ) {
 				$slug         = $te['slug'];
-				$menu[ $pos ] = $snap[ $slug ]['item'];
+				$menu[ $pos ] = $snap[ $slug ]['item']; // phpcs:ignore WordPress.WP.GlobalVariablesOverride -- Rebuilding the admin menu is this plugin's core purpose.
 
-				// Absorb any items parented to this slug (pre-indexed above)
-				$raw_children = isset( $by_parent[ 'item:' . $slug ] ) ? $by_parent[ 'item:' . $slug ] : [];
-				$children = [];
+				// Absorb any items parented to this slug (pre-indexed above).
+				$raw_children = isset( $by_parent[ 'item:' . $slug ] ) ? $by_parent[ 'item:' . $slug ] : array();
+				$children     = array();
 				foreach ( $raw_children as $ic ) {
-					if ( ! empty( $ic['hidden'] ) || ! isset( $snap[ $ic['slug'] ] ) ) continue;
+					if ( ! empty( $ic['hidden'] ) || ! isset( $snap[ $ic['slug'] ] ) ) {
+						continue;
+					}
 					$children[] = $ic;
 				}
 				if ( ! empty( $children ) ) {
-					usort( $children, function( $a, $b ) { return (int) $a['order'] - (int) $b['order']; } );
-					$subs = isset( $submenu[ $slug ] ) ? $submenu[ $slug ] : [];
+					usort(
+						$children,
+						function ( $a, $b ) {
+							return (int) $a['order'] - (int) $b['order'];
+						}
+					);
+					$subs = isset( $submenu[ $slug ] ) ? $submenu[ $slug ] : array();
 					foreach ( $children as $child ) {
 						$cs     = $child['slug'];
 						$co     = $snap[ $cs ]['item'];
-						$subs[] = [
+						$subs[] = array(
 							$this->clean_title( $co[0] ),
 							$co[1],
 							$this->normalize_menu_url( $co[2] ),
 							$co[3] ?? $this->clean_title( $co[0] ),
-						];
+						);
 						if ( isset( $submenu[ $cs ] ) ) {
-						foreach ( $submenu[ $cs ] as $s ) {
-							$s[2] = $this->normalize_menu_url( $s[2] );
-							$subs[] = $s;
-						}
-						// Do NOT unset $submenu[$cs] — WP's user_can_access_admin_page() searches
-						// all of $submenu to verify access. Removing it causes "not allowed" errors.
-						// Orphaned entries are invisible in the UI (no $menu top-level parent).
+							foreach ( $submenu[ $cs ] as $s ) {
+								$s[2]   = $this->normalize_menu_url( $s[2] );
+								$subs[] = $s;
+							}
+							// Do NOT unset $submenu[$cs] — WP's user_can_access_admin_page() searches
+							// all of $submenu to verify access. Removing it causes "not allowed" errors.
+							// Orphaned entries are invisible in the UI (no $menu top-level parent).
 						}
 					}
-					$submenu[ $slug ] = $subs;
+					$submenu[ $slug ] = $subs; // phpcs:ignore WordPress.WP.GlobalVariablesOverride -- Rebuilding the admin menu is this plugin's core purpose.
 				}
-
-			} elseif ( $te['type'] === 'group' ) {
+			} elseif ( 'group' === $te['type'] ) {
 				$g     = $groups_by_id[ $te['id'] ];
 				$gslug = 'wpa_mm_grp_' . $g['id'];
 
-				// Children pre-indexed above
-				$raw_children = $by_parent[ 'group:' . $g['id'] ] ?? [];
-				$children = [];
+				// Children pre-indexed above.
+				$raw_children = $by_parent[ 'group:' . $g['id'] ] ?? array();
+				$children     = array();
 				foreach ( $raw_children as $ic ) {
-					if ( ! empty( $ic['hidden'] ) || ! isset( $snap[ $ic['slug'] ] ) ) continue;
+					if ( ! empty( $ic['hidden'] ) || ! isset( $snap[ $ic['slug'] ] ) ) {
+						continue;
+					}
 					$children[] = $ic;
 				}
-				usort( $children, function( $a, $b ) { return (int) $a['order'] - (int) $b['order']; } );
+				usort(
+					$children,
+					function ( $a, $b ) {
+						return (int) $a['order'] - (int) $b['order'];
+					}
+				);
 
-				$subs = [];
+				$subs = array();
 				foreach ( $children as $child ) {
 					$cs     = $child['slug'];
 					$co     = $snap[ $cs ]['item'];
-				$subs[] = [
-					$this->clean_title( $co[0] ),
-					$co[1],
-					$this->normalize_menu_url( $co[2] ),
-					$co[3] ?? $this->clean_title( $co[0] ),
-				];
+					$subs[] = array(
+						$this->clean_title( $co[0] ),
+						$co[1],
+						$this->normalize_menu_url( $co[2] ),
+						$co[3] ?? $this->clean_title( $co[0] ),
+					);
 					if ( isset( $submenu[ $cs ] ) ) {
 						foreach ( $submenu[ $cs ] as $s ) {
-							$s[2] = $this->normalize_menu_url( $s[2] );
+							$s[2]   = $this->normalize_menu_url( $s[2] );
 							$subs[] = $s;
 						}
 						// Do NOT unset $submenu[$cs] — same reason as above.
@@ -246,17 +353,20 @@ class WPA_Menu_Manager {
 				}
 
 				$first_url    = $subs[0][2] ?? '#';
-				$menu[ $pos ] = [
-					$g['title'], 'manage_options', $first_url, $g['title'],
+				$menu[ $pos ] = array( // phpcs:ignore WordPress.WP.GlobalVariablesOverride -- Rebuilding the admin menu is this plugin's core purpose.
+					$g['title'],
+					'manage_options',
+					$first_url,
+					$g['title'],
 					'menu-top menu-icon-generic',
 					'toplevel_page_' . $gslug,
 					$g['icon'] ?? 'dashicons-category',
-				];
+				);
 				// Store submenu under $first_url so WordPress can find it when rendering.
 				// WP looks for $submenu[$menu[n][2]] — if we use $gslug here instead,
 				// the submenu never renders.
-				if ( $first_url !== '#' ) {
-					$submenu[ $first_url ] = $subs;
+				if ( '#' !== $first_url ) {
+					$submenu[ $first_url ] = $subs; // phpcs:ignore WordPress.WP.GlobalVariablesOverride -- Rebuilding the admin menu is this plugin's core purpose.
 				}
 			}
 
@@ -266,84 +376,120 @@ class WPA_Menu_Manager {
 
 	// ── Save handler ──────────────────────────────────────────────────────────
 
+	/**
+	 * Handle the admin-post save (and reset) submission for the menu configuration.
+	 *
+	 * @return void
+	 */
 	public function handle_save(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Not allowed.', 'admin-menu-manager' ) );
 		}
 		check_admin_referer( 'wpa_mm_nonce' );
 
-		// Reset: wipe all saved config and return to WP defaults
+		// Reset: wipe all saved config and return to WP defaults.
 		if ( ! empty( $_POST['wpa_reset'] ) ) {
 			delete_option( self::OPTION );
-			wp_redirect( add_query_arg(
-				[ 'page' => self::SLUG, 'reset' => 1 ],
-				admin_url( 'options-general.php' )
-			) );
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'  => self::SLUG,
+						'reset' => 1,
+					),
+					admin_url( 'options-general.php' )
+				)
+			);
 			exit;
 		}
 
-		$raw = isset( $_POST['mm_payload'] ) ? wp_unslash( $_POST['mm_payload'] ) : '{}';
+		// $_POST['mm_payload'] is a JSON blob: it is length-limited below, json_decoded, and every
+		// extracted field is individually sanitized. Sanitizing the raw JSON here would corrupt it.
+		$raw = isset( $_POST['mm_payload'] ) ? wp_unslash( $_POST['mm_payload'] ) : '{}'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		// Reject payloads over 200 KB — no legitimate menu config comes close to this.
 		if ( strlen( $raw ) > 204800 ) {
-			wp_die( esc_html__( 'Payload too large.', 'admin-menu-manager' ), '', [ 'response' => 400 ] );
+			wp_die( esc_html__( 'Payload too large.', 'admin-menu-manager' ), '', array( 'response' => 400 ) );
 		}
 		$data = json_decode( $raw, true );
 
 		if ( ! is_array( $data ) || empty( $data['list'] ) ) {
-			wp_redirect( add_query_arg(
-				[ 'page' => self::SLUG, 'updated' => 1 ],
-				admin_url( 'options-general.php' )
-			) );
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => self::SLUG,
+						'updated' => 1,
+					),
+					admin_url( 'options-general.php' )
+				)
+			);
 			exit;
 		}
 
-		$new_items  = [];
-		$new_groups = [];
+		$new_items  = array();
+		$new_groups = array();
 		$order      = 1;
 
 		foreach ( $data['list'] as $entry ) {
 			$type = sanitize_text_field( $entry['type'] ?? '' );
 
-			if ( $type === 'item' ) {
+			if ( 'item' === $type ) {
 				$slug = mb_substr( sanitize_text_field( $entry['slug'] ?? '' ), 0, 500 );
-				if ( ! $slug ) { $order++; continue; }
-				$new_items[] = [
+				if ( ! $slug ) {
+					++$order;
+					continue;
+				}
+				$parent      = sanitize_text_field( $entry['parent'] ?? '' );
+				$new_items[] = array(
 					'slug'   => $slug,
 					'hidden' => ! empty( $entry['hidden'] ),
 					'order'  => $order,
-					'parent' => sanitize_text_field( $entry['parent'] ?? '' ) ?: null,
-				];
+					'parent' => '' !== $parent ? $parent : null,
+				);
 
-			} elseif ( $type === 'group' ) {
+			} elseif ( 'group' === $type ) {
 				$gid   = sanitize_text_field( $entry['id'] ?? '' );
 				$title = mb_substr( sanitize_text_field( $entry['title'] ?? '' ), 0, 200 );
 				if ( $gid && $title ) {
-					$new_groups[] = [
+					$new_groups[] = array(
 						'id'    => $gid,
 						'title' => $title,
 						'icon'  => 'dashicons-category',
 						'order' => $order,
-					];
+					);
 				}
 			}
 
-			$order++;
+			++$order;
 		}
 
-		$this->save_config( [ 'items' => $new_items, 'groups' => $new_groups ] );
+		$this->save_config(
+			array(
+				'items'  => $new_items,
+				'groups' => $new_groups,
+			)
+		);
 
-		wp_redirect( add_query_arg(
-			[ 'page' => self::SLUG, 'updated' => 1 ],
-			admin_url( 'options-general.php' )
-		) );
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => self::SLUG,
+					'updated' => 1,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
 		exit;
 	}
 
-	// ── Admin notice ──────────────────────────────────────────────────────────
-
+	/**
+	 * Show a success/reset admin notice on the plugin's settings screen.
+	 *
+	 * @return void
+	 */
 	public function show_notice(): void {
 		$screen = get_current_screen();
-		if ( ! $screen || strpos( $screen->id, 'menu-manager' ) === false ) return;
+		if ( ! $screen || strpos( $screen->id, 'menu-manager' ) === false ) {
+			return;
+		}
 		if ( ! empty( $_GET['updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only flag set by wp_redirect() after save.
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Menu settings saved.', 'admin-menu-manager' ) . '</p></div>';
 		}
@@ -354,8 +500,15 @@ class WPA_Menu_Manager {
 
 	// ── Settings page ─────────────────────────────────────────────────────────
 
+	/**
+	 * Render the plugin's settings page (the drag-and-drop menu editor).
+	 *
+	 * @return void
+	 */
 	public function render_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) return;
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 
 		global $menu, $submenu;
 		$config = $this->get_config();
@@ -364,43 +517,49 @@ class WPA_Menu_Manager {
 		// which were moved into groups or nested under other items still appear in
 		// the settings list. If apply_config() didn't run (no config yet), fall back
 		// to reading the current $menu directly.
-		$snap_items = [];
-		$source = ! empty( $this->orig_snap ) ? $this->orig_snap : [];
+		$snap_items = array();
+		$source     = ! empty( $this->orig_snap ) ? $this->orig_snap : array();
 
 		if ( empty( $source ) ) {
 			foreach ( $menu as $pos => $item ) {
-				if ( empty( $item[2] ) ) continue;
-				if ( strpos( $item[5] ?? '', 'toplevel_page_wpa_mm_grp_' ) === 0 ) continue;
-				if ( strpos( $item[4] ?? '', 'separator' ) !== false ) continue;
-				$source[ $item[2] ] = [
+				if ( empty( $item[2] ) ) {
+					continue;
+				}
+				if ( strpos( $item[5] ?? '', 'toplevel_page_wpa_mm_grp_' ) === 0 ) {
+					continue;
+				}
+				if ( strpos( $item[4] ?? '', 'separator' ) !== false ) {
+					continue;
+				}
+				$source[ $item[2] ] = array(
 					'item'  => $item,
 					'pos'   => (int) $pos,
 					'n_sub' => isset( $submenu[ $item[2] ] ) ? count( $submenu[ $item[2] ] ) : 0,
-				];
+				);
 			}
 		}
 
 		foreach ( $source as $slug => $info ) {
-			$snap_items[ $slug ] = [
+			$snap_items[ $slug ] = array(
 				'title' => $this->clean_title( $info['item'][0] ),
 				'slug'  => $slug,
 				'pos'   => $info['pos'],
 				'n_sub' => $info['n_sub'],
-			];
+			);
 		}
 
-		// Index saved config by slug
-		$item_cfg = [];
+		// Index saved config by slug.
+		$item_cfg = array();
 		foreach ( $config['items'] as $ic ) {
 			$item_cfg[ $ic['slug'] ] = $ic;
 		}
 
-		// Build combined display list (items + groups), sorted by saved order
-		$entries = [];
+		// Build combined display list (items + groups), sorted by saved order.
+		$entries = array();
 
 		foreach ( $snap_items as $slug => $info ) {
 			$ic        = isset( $item_cfg[ $slug ] ) ? $item_cfg[ $slug ] : null;
-			$entries[] = [
+			$entries[] = array(
 				'type'   => 'item',
 				'slug'   => $slug,
 				'title'  => $info['title'],
@@ -408,26 +567,31 @@ class WPA_Menu_Manager {
 				'hidden' => $ic ? (bool) $ic['hidden'] : false,
 				'order'  => $ic ? (int) $ic['order'] : 900 + $info['pos'],
 				'parent' => $ic ? ( $ic['parent'] ?? '' ) : '',
-			];
+			);
 		}
 
 		foreach ( $config['groups'] as $g ) {
-			$entries[] = [
+			$entries[] = array(
 				'type'  => 'group',
 				'id'    => $g['id'],
 				'title' => $g['title'],
 				'order' => (int) ( $g['order'] ?? 500 ),
-			];
+			);
 		}
 
-		usort( $entries, function( $a, $b ) { return $a['order'] - $b['order']; } );
+		usort(
+			$entries,
+			function ( $a, $b ) {
+				return $a['order'] - $b['order'];
+			}
+		);
 
-		// Parent dropdown options
-		$group_opts = [];
+		// Parent dropdown options.
+		$group_opts = array();
 		foreach ( $config['groups'] as $g ) {
 			$group_opts[ 'group:' . $g['id'] ] = $g['title'];
 		}
-		$item_parent_opts = [];
+		$item_parent_opts = array();
 		foreach ( $snap_items as $slug => $info ) {
 			$item_parent_opts[ 'item:' . $slug ] = $info['title'];
 		}
@@ -436,11 +600,11 @@ class WPA_Menu_Manager {
 <div class="wrap">
 <h1><?php esc_html_e( 'Admin Menu Manager', 'admin-menu-manager' ); ?></h1>
 <p style="max-width:680px;color:#555;">
-	<?php echo wp_kses( __( 'Drag rows to reorder. Use <strong>Parent</strong> to nest an item inside a group or another menu item — it disappears from the top level and its sub-items are preserved inside the parent. <strong>Hide</strong> removes the item entirely. Settings apply to admin users only.', 'admin-menu-manager' ), [ 'strong' => [] ] ); ?>
+		<?php echo wp_kses( __( 'Drag rows to reorder. Use <strong>Parent</strong> to nest an item inside a group or another menu item — it disappears from the top level and its sub-items are preserved inside the parent. <strong>Hide</strong> removes the item entirely. Settings apply to admin users only.', 'admin-menu-manager' ), array( 'strong' => array() ) ); ?>
 </p>
 
 <div style="background:#fff8e5;border-left:4px solid #f0b429;padding:10px 14px;margin:0 0 24px;font-size:13px;max-width:680px;">
-	<?php echo wp_kses( __( "<strong>⚠ Don't hide Settings</strong> — that's where this page lives. Direct URL if you ever need it:", 'admin-menu-manager' ), [ 'strong' => [] ] ); ?><br>
+		<?php echo wp_kses( __( "<strong>⚠ Don't hide Settings</strong> — that's where this page lives. Direct URL if you ever need it:", 'admin-menu-manager' ), array( 'strong' => array() ) ); ?><br>
 	<code style="word-break:break-all;font-size:11px;"><?php echo esc_html( admin_url( 'options-general.php?page=' . self::SLUG ) ); ?></code>
 </div>
 
@@ -453,7 +617,7 @@ class WPA_Menu_Manager {
 
 <form id="mm-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 <input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION ); ?>">
-<?php wp_nonce_field( 'wpa_mm_nonce' ); ?>
+		<?php wp_nonce_field( 'wpa_mm_nonce' ); ?>
 <input type="hidden" id="mm-payload" name="mm_payload" value="">
 
 <div style="max-width:700px;">
@@ -467,17 +631,16 @@ class WPA_Menu_Manager {
 
 	<!-- Sortable list -->
 	<ul id="mm-list" style="list-style:none;margin:0;padding:0;border:1px solid #ddd;border-radius:0 0 4px 4px;">
-	<?php
-	$total = count( $entries );
-	foreach ( $entries as $i => $entry ) :
-		$row_border = ( $i < $total - 1 ) ? 'border-bottom:1px solid #eee;' : '';
+		<?php
+		$total = count( $entries );
+		foreach ( $entries as $i => $entry ) :
+			$row_border = ( $i < $total - 1 ) ? 'border-bottom:1px solid #eee;' : '';
 
-		if ( $entry['type'] === 'group' ) :
-			$gid = esc_attr( $entry['id'] );
-	?>
+			if ( 'group' === $entry['type'] ) :
+				?>
 	<li class="mm-row mm-group-row"
 		data-type="group"
-		data-id="<?php echo $gid; ?>"
+		data-id="<?php echo esc_attr( $entry['id'] ); ?>"
 		style="display:flex;align-items:center;padding:8px 10px;<?php echo esc_attr( $row_border ); ?>background:#eef2ff;cursor:move;">
 		<span class="mm-handle dashicons dashicons-menu" title="<?php esc_attr_e( 'Drag to reorder', 'admin-menu-manager' ); ?>"
 			style="color:#7c8fcc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>
@@ -494,10 +657,11 @@ class WPA_Menu_Manager {
 		<span style="width:50px;flex-shrink:0;"></span>
 		<span style="width:190px;flex-shrink:0;margin-left:8px;"></span>
 	</li>
-	<?php else :
+				<?php
+	else :
 		$hidden = $entry['hidden'];
 		$parent = $entry['parent'];
-	?>
+		?>
 	<li class="mm-row mm-item-row"
 		data-type="item"
 		data-slug="<?php echo esc_attr( $entry['slug'] ); ?>"
@@ -507,7 +671,12 @@ class WPA_Menu_Manager {
 		<span style="flex:1;">
 			<?php echo esc_html( $entry['title'] ); ?>
 			<?php if ( $entry['n_sub'] > 0 ) : ?>
-			<span style="color:#aaa;font-size:11px;"> (<?php echo esc_html( sprintf( _n( '%d sub-item', '%d sub-items', $entry['n_sub'], 'admin-menu-manager' ), $entry['n_sub'] ) ); ?>)</span>
+			<span style="color:#aaa;font-size:11px;"> (
+				<?php
+				/* translators: %d: number of sub-items. */
+				echo esc_html( sprintf( _n( '%d sub-item', '%d sub-items', $entry['n_sub'], 'admin-menu-manager' ), $entry['n_sub'] ) );
+				?>
+			)</span>
 			<?php endif; ?>
 		</span>
 		<label style="width:50px;flex-shrink:0;text-align:center;cursor:pointer;font-size:13px;" title="<?php esc_attr_e( 'Hide this item', 'admin-menu-manager' ); ?>">
@@ -526,9 +695,12 @@ class WPA_Menu_Manager {
 				</optgroup>
 				<?php endif; ?>
 				<optgroup label="<?php esc_attr_e( 'Nest under item', 'admin-menu-manager' ); ?>">
-					<?php foreach ( $item_parent_opts as $val => $label ) :
-						if ( $val === 'item:' . $entry['slug'] ) continue;
-					?>
+					<?php
+					foreach ( $item_parent_opts as $val => $label ) :
+						if ( 'item:' . $entry['slug'] === $val ) {
+							continue;
+						}
+						?>
 					<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $parent, $val ); ?>>
 						↳ <?php echo esc_html( $label ); ?>
 					</option>
@@ -538,7 +710,7 @@ class WPA_Menu_Manager {
 		</span>
 	</li>
 	<?php endif; ?>
-	<?php endforeach; ?>
+		<?php endforeach; ?>
 	</ul>
 </div>
 
@@ -677,7 +849,7 @@ jQuery(function($) {
 			.addClass('mm-row mm-group-row')
 			.attr({'data-type': 'group', 'data-id': gid})
 			.css({display:'flex', 'align-items':'center', padding:'8px 10px',
-				  'border-top':'1px solid #eee', background:'#eef2ff', cursor:'move'})
+					'border-top':'1px solid #eee', background:'#eef2ff', cursor:'move'})
 			.html(
 				'<span class="mm-handle dashicons dashicons-menu" style="color:#7c8fcc;cursor:grab;font-size:18px;width:28px;flex-shrink:0;"></span>' +
 				'<span style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">' +
@@ -752,8 +924,14 @@ jQuery(function($) {
 
 	// ── Utility ───────────────────────────────────────────────────────────────
 
+	/**
+	 * Strip any markup from a menu title so it renders as plain text.
+	 *
+	 * @param mixed $title Raw menu title (WordPress menu arrays are loosely typed).
+	 * @return string Plain-text title.
+	 */
 	private function clean_title( $title ): string {
-		return strip_tags( (string) $title );
+		return wp_strip_all_tags( (string) $title );
 	}
 
 	/**
@@ -764,10 +942,13 @@ jQuery(function($) {
 	 * slugs like 'ai1wm_import' produce 'tools.php?page=ai1wm_import' instead of
 	 * 'admin.php?page=ai1wm_import', causing a frontend 404.
 	 * Converting bare slugs to absolute admin.php URLs fixes this regardless of parent.
+	 *
+	 * @param string $url Menu URL or bare page slug.
+	 * @return string Absolute admin URL (or the original value if already absolute/external).
 	 */
 	private function normalize_menu_url( string $url ): string {
-		if ( strpos( $url, '.php' ) !== false || strpos( $url, '://' ) !== false ) {
-			return $url; // already absolute or external
+		if ( false !== strpos( $url, '.php' ) || false !== strpos( $url, '://' ) ) {
+			return $url; // Already absolute or external.
 		}
 		return 'admin.php?page=' . $url;
 	}
@@ -779,24 +960,36 @@ if ( is_admin() ) {
 }
 
 // Register the write-abilities toggle so it saves via options.php.
-add_action( 'admin_init', function() {
-	register_setting( 'wpa_mm_abilities', 'wpa_mm_write_abilities', array(
-		'sanitize_callback' => 'rest_sanitize_boolean',
-	) );
-} );
+add_action(
+	'admin_init',
+	function () {
+		register_setting(
+			'wpa_mm_abilities',
+			'wpa_mm_write_abilities',
+			array(
+				'sanitize_callback' => 'rest_sanitize_boolean',
+			)
+		);
+	}
+);
 
 // The slug "admin-menu-manager" is taken on WordPress.org. Replace the default
 // "View details" row link (which would show another plugin's details) with a
 // direct link to the author's site.
-add_filter( 'plugin_row_meta', function( $links, $file ) {
-	if ( plugin_basename( __FILE__ ) !== $file ) {
-		return $links;
-	}
-	foreach ( $links as $key => $link ) {
-		if ( strpos( $link, 'plugin-install.php' ) !== false ) {
-			unset( $links[ $key ] );
+add_filter(
+	'plugin_row_meta',
+	function ( $links, $file ) {
+		if ( plugin_basename( __FILE__ ) !== $file ) {
+			return $links;
 		}
-	}
-	$links[] = '<a href="' . esc_url( 'https://miriamschwab.me/plugins/admin-menu-manager' ) . '" target="_blank">' . esc_html__( 'Visit plugin site', 'admin-menu-manager' ) . '</a>';
-	return $links;
-}, 10, 2 );
+		foreach ( $links as $key => $link ) {
+			if ( strpos( $link, 'plugin-install.php' ) !== false ) {
+				unset( $links[ $key ] );
+			}
+		}
+		$links[] = '<a href="' . esc_url( 'https://miriamschwab.me/plugins/admin-menu-manager' ) . '" target="_blank">' . esc_html__( 'Visit plugin site', 'admin-menu-manager' ) . '</a>';
+		return $links;
+	},
+	10,
+	2
+);
