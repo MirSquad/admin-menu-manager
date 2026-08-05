@@ -28,6 +28,10 @@ Single PHP file, no build process, no external dependencies beyond jQuery UI Sor
 3. Activate the plugin in WordPress
 4. Go to **Settings > Admin Menu Manager** to configure
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## Requirements
 
 - WordPress 5.0+
