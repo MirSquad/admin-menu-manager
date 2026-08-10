@@ -4,7 +4,7 @@ Tags: admin menu, sidebar, menu reorder, admin ui, drag and drop
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 2.9.3
+Stable tag: 2.9.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,9 @@ No. Changes apply only to administrators (users with `manage_options` capability
 Use the **Reset to WordPress Defaults** button at the bottom of the settings page. This clears all saved configuration.
 
 == Changelog ==
+
+= 2.9.4 - 2026-08-10 =
+* Changed: Removed the "Enable write abilities" settings checkbox for the Abilities API. The reset-config ability (already marked destructive) is now always registered — confirmation happens via the AI client, not a site-wide toggle.
 
 = 2.9.3 - 2026-08-05 =
 * Hardening: admin redirects now use wp_safe_redirect(), and page output is explicitly escaped. WordPress coding-standards cleanup. No changes to behavior.

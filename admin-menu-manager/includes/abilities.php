@@ -3,9 +3,9 @@
  * WordPress Abilities API integration for Admin Menu Manager.
  * Requires WP 6.9+ (Abilities API). Does nothing on older versions.
  *
- * Read abilities are always registered.
- * Write abilities are only registered when "Enable write abilities" is on
- * in Settings > Admin Menu Manager.
+ * All abilities are always registered. The write ability is marked
+ * destructive; compliant AI clients must confirm with the user before
+ * running it.
  *
  * @package Admin_Menu_Manager
  */
@@ -43,7 +43,7 @@ function wpa_mm_register_ability_category() {
 // -------------------------------------------------------------------------
 add_action( 'wp_abilities_api_init', 'wpa_mm_register_abilities' );
 /**
- * Register the Admin Menu Manager abilities (get-config, and gated reset-config).
+ * Register the Admin Menu Manager abilities (get-config, reset-config).
  *
  * @return void
  */
@@ -113,11 +113,7 @@ function wpa_mm_register_abilities() {
 		)
 	);
 
-	// --- Write abilities (gated by option) --------------------------------
-
-	if ( ! get_option( 'wpa_mm_write_abilities', false ) ) {
-		return;
-	}
+	// --- reset-config (always available) -----------------------------------
 
 	wp_register_ability(
 		'admin-menu-manager/reset-config',

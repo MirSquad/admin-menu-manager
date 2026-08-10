@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.9.4 — 2026-08-10
+
+- Changed: Removed the "Enable write abilities" settings checkbox for the Abilities API. The reset-config ability (already marked destructive) is now always registered — confirmation happens via the AI client, not a site-wide toggle.
+
 ## 2.9.3 — 2026-08-05
 
 - Hardening: admin redirects now use `wp_safe_redirect()`, and page output is explicitly escaped. WordPress coding-standards cleanup. No changes to behavior.
